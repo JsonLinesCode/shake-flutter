@@ -44,7 +44,7 @@ class _HomeState extends State<Home> {
   bool? screenRecordingEnabled = false;
   bool? sensitiveDataEnabled = false;
   bool? screenshotIncluded = false;
-  int? shakingThreshold = 400;
+  double? shakingThreshold = 2.7;
 
   File? file1;
   File? file2;

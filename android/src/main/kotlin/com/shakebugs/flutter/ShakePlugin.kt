@@ -223,12 +223,12 @@ class ShakePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     }
 
     private fun getShakingThreshold(result: Result) {
-        val threshold: Int = Shake.getReportConfiguration().shakingThreshold
+        val threshold: Double = Shake.getReportConfiguration().shakingThreshold
         result.success(threshold)
     }
 
     private fun setShakingThreshold(call: MethodCall) {
-        val threshold: Int? = call.argument("shakingThreshold")
+        val threshold: Double? = call.argument("shakingThreshold")
         threshold?.let {
             Shake.getReportConfiguration().shakingThreshold = threshold
         }

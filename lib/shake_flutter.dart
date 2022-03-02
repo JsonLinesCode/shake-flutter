@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shake/shake.dart';
 import 'package:shake_flutter/enums/log_level.dart';
 import 'package:shake_flutter/enums/shake_screen.dart';
 import 'package:shake_flutter/helpers/network_tracker.dart';
@@ -19,6 +20,24 @@ class Shake {
   static NotificationsTracker _notificationsTracker = NotificationsTracker();
   static NetworkTracker _networkTracker = NetworkTracker();
   static Mapper _mapper = Mapper();
+  static late ShakeDetector _detector;
+
+  /// A function triggered on show
+  /// Can be used to prepare data before showing the Shake interface
+  static Function? onShowCallBack;
+
+  static initDetector({double? gravityThreshold}) async {
+    if (gravityThreshold == null) {
+      gravityThreshold = (await getShakingThreshold()) ?? 2.7;
+    }
+    _detector = ShakeDetector.autoStart(
+        shakeThresholdGravity: gravityThreshold,
+        onPhoneShake: () async {
+          if ((await isInvokeShakeOnShakeDeviceEvent()) ?? false) {
+            onShake();
+          }
+        });
+  }
 
   /// Initializes Shake.
   ///
@@ -26,10 +45,18 @@ class Shake {
   /// Shake won't work if method is not called.
   static void start(String clientID, String clientSecret) async {
     _channel.setMethodCallHandler(_channelMethodHandler);
+    initDetector();
     await _channel.invokeMethod('start', {
       'clientId': clientID,
       'clientSecret': clientSecret,
     });
+  }
+
+  /// A callback triggered each time show is called
+  /// Can be used to pack data or do some process
+  static void onShake() async {
+    show();
+    
   }
 
   /// Shows Shake screen.
@@ -37,6 +64,10 @@ class Shake {
   /// [ShakeScreen.home] or [ShakeScreen.newTicket].
   /// The default one is [ShakeScreen.newTicket]
   static void show([shakeScreen = ShakeScreen.newTicket]) async {
+    
+    if (onShowCallBack != null) {
+      onShowCallBack!();
+    }
     await _channel.invokeMethod('show', {
       'shakeScreen': describeEnum(shakeScreen),
     });
@@ -130,14 +161,15 @@ class Shake {
   }
 
   ///Checks what value shaking threshold is set on
-  static Future<int?> getShakingThreshold() async {
+  static Future<double?> getShakingThreshold() async {
     return await _channel.invokeMethod('getShakingThreshold');
   }
 
   ///Sets shaking threshold
-  static void setShakingThreshold(int shakingThreshold) async {
+  static void setShakingThreshold(double gravityThreshold) async {
+    initDetector(gravityThreshold: gravityThreshold);
     await _channel.invokeMethod('setShakingThreshold', {
-      'shakingThreshold': shakingThreshold,
+      'shakingThreshold': gravityThreshold,
     });
   }
 
@@ -262,8 +294,7 @@ class Shake {
 
   /// Gets feedback types shown on the new ticket screen.
   static Future<List<FeedbackType>> getFeedbackTypes() async {
-    List<Map>? feedbackTypesMap =
-        await _channel.invokeListMethod<Map>('getFeedbackTypes');
+    List<Map>? feedbackTypesMap = await _channel.invokeListMethod<Map>('getFeedbackTypes');
     return _mapper.mapToFeedbackTypes(feedbackTypesMap) ?? [];
   }
 
@@ -341,12 +372,9 @@ class Shake {
   ///
   /// Inserted notification event will be visible in the activity history.
   /// [NotificationEvent] should be filled properly.
-  static void insertNotificationEvent(
-      NotificationEvent notificationEvent) async {
-    NotificationEvent filteredEvent =
-        _notificationsTracker.filterNotificationEvent(notificationEvent);
-    await _channel.invokeMethod('insertNotificationEvent',
-        {'notificationEvent': filteredEvent.toMap()});
+  static void insertNotificationEvent(NotificationEvent notificationEvent) async {
+    NotificationEvent filteredEvent = _notificationsTracker.filterNotificationEvent(notificationEvent);
+    await _channel.invokeMethod('insertNotificationEvent', {'notificationEvent': filteredEvent.toMap()});
   }
 
   /// Inserts network request to the activity history.
@@ -354,15 +382,12 @@ class Shake {
   /// Inserted network request will be visible in the activity history.
   /// [NetworkRequest] should be filled properly.
   static void insertNetworkRequest(NetworkRequest networkRequest) async {
-    NetworkRequest filteredRequest =
-        _networkTracker.filterNetworkRequest(networkRequest);
-    await _channel.invokeMethod(
-        'insertNetworkRequest', {'networkRequest': filteredRequest.toMap()});
+    NetworkRequest filteredRequest = _networkTracker.filterNetworkRequest(networkRequest);
+    await _channel.invokeMethod('insertNetworkRequest', {'networkRequest': filteredRequest.toMap()});
   }
 
   /// Sets filter for notification events.
-  static void setNotificationEventsFilter(
-      NotificationEventFilter? filter) async {
+  static void setNotificationEventsFilter(NotificationEventFilter? filter) async {
     _notificationsTracker.filter = filter;
   }
 
@@ -382,8 +407,7 @@ class Shake {
   static Future<void> _channelMethodHandler(MethodCall call) async {
     switch (call.method) {
       case 'onNotificationReceived':
-        NotificationEvent notificationEvent =
-            NotificationEvent.fromMap(call.arguments);
+        NotificationEvent notificationEvent = NotificationEvent.fromMap(call.arguments);
         insertNotificationEvent(notificationEvent);
         break;
     }
